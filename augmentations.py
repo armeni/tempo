@@ -28,16 +28,42 @@ def remove_small_objects(mask, min_area=100):
             cleaned[labels == i] = 1
     return cleaned
 
-def occlude_random_region(img, mask, max_size=50):
+import numpy as np
+import cv2
+import random
+
+def occlude_random_region(img, mask, min_size=50, max_size=250, max_attempts=20):
     h, w = img.shape[:2]
-    for _ in range(10):
-        x = np.random.randint(0, w - max_size)
-        y = np.random.randint(0, h - max_size)
-        roi = mask[y:y+max_size, x:x+max_size]
-        if np.sum(roi) == 0:
-            img[y:y+max_size, x:x+max_size] = np.random.randint(0, 255, (max_size, max_size, 3), dtype=np.uint8)
-            break
-    return img
+    occluded_img = img.copy()
+
+    mean_color = np.mean(img[mask == 0], axis=0)  
+    mean_color = mean_color.astype(np.uint8)
+
+    for _ in range(max_attempts):
+        shape_type = random.choice(["rect", "circle"])
+        size_x = random.randint(min_size, max_size)
+        size_y = random.randint(min_size, max_size) if shape_type == "rect" else size_x
+
+        x = random.randint(0, w - size_x)
+        y = random.randint(0, h - size_y)
+
+        roi_mask = mask[y:y+size_y, x:x+size_x]
+        if np.sum(roi_mask) != 0:
+            continue
+
+        color_variation = np.random.randint(-20, 20, 3)
+        occlusion_color = np.clip(mean_color + color_variation, 0, 255).astype(np.uint8).tolist()
+
+        if shape_type == "rect":
+            cv2.rectangle(occluded_img, (x, y), (x + size_x, y + size_y), occlusion_color, -1)
+        elif shape_type == "circle":
+            center = (x + size_x // 2, y + size_y // 2)
+            radius = min(size_x, size_y) // 2
+            cv2.circle(occluded_img, center, radius, occlusion_color, -1)
+
+        break 
+
+    return occluded_img
 
 file_names = sorted(os.listdir(f"{INPUT_DIR}/time1"))
 
